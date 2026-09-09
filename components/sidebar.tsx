@@ -1,0 +1,74 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  FilePlus2,
+  Activity,
+  Boxes,
+  Inbox,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { PrimonLogo } from "./logo";
+import { useDemo } from "@/lib/store";
+
+const nav = [
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/work-orders/new", label: "New work order", icon: FilePlus2 },
+  { href: "/dashboard/monitor", label: "Gas-reading monitor", icon: Activity },
+  { href: "/dashboard/inventory", label: "Fumigant stock", icon: Boxes },
+  { href: "/dashboard/intake", label: "Website intake", icon: Inbox },
+];
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const { workOrders } = useDemo();
+  const flaggedCount = workOrders.filter((w) => w.status === "flagged").length;
+
+  return (
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-primon-950 text-primon-100 lg:flex">
+      <div className="flex items-center px-6 py-6">
+        <PrimonLogo width={160} />
+      </div>
+
+      <nav className="flex-1 space-y-1 px-3 py-2">
+        {nav.map((item) => {
+          const active =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors",
+                active
+                  ? "bg-white/10 text-white"
+                  : "text-primon-300 hover:bg-white/5 hover:text-white"
+              )}
+            >
+              <span className="flex items-center gap-2.5">
+                <Icon className="h-4 w-4" strokeWidth={1.75} />
+                {item.label}
+              </span>
+              {item.href === "/dashboard/monitor" && flaggedCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-status-critical px-1 text-[10px] font-semibold text-white">
+                  {flaggedCount}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-white/10 px-6 py-4">
+        <p className="text-[11px] leading-relaxed text-primon-400">
+          Licensed commercial applicator — Malawi Pesticides Control Board
+        </p>
+      </div>
+    </aside>
+  );
+}

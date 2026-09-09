@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  ::selection {
+    background-color: #16224a;
+    color: #f5f7fc;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  :focus-visible {
+    outline: 2px solid #2a3e7d;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .noise-overlay {
+    background-image: radial-gradient(rgba(16, 26, 51, 0.08) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+}
+
+.certificate-sheet {
+  position: relative;
+  box-sizing: border-box;
+  width: 794px;
+  height: 1123px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #ffffff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  page-break-after: avoid;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    height: 297mm;
+    overflow: hidden;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #certificate-sheet,
+  #certificate-sheet * {
+    visibility: visible;
+  }
+
+  #certificate-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin: 0;
+    width: 210mm;
+    height: 297mm;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
