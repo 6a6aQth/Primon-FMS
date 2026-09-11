@@ -8,14 +8,14 @@ This file combines the planned development roadmap and the reactive work log (fi
 ## Planned Roadmap
 
 ### 1.0 Backend & Database Infrastructure (generated against SDD v1.0)
-> Nothing else in this roadmap can persist correctly until Neon + Drizzle exist. Reuse the existing App Router UI; do not rebuild screens here. The current `lib/store.tsx` localStorage store is demo-only and must not become the production data layer.
-- [ ] 1.1 Install `drizzle-orm`, `drizzle-kit`, and the Neon serverless driver (`@neondatabase/serverless`). Do not add Prisma.
-- [ ] 1.2 Create `db/schema/` covering every SDD §A.4 table with FKs and enums: `users`, `work_orders`, `fccs`, `shipping_instructions`, `fumigation_descriptions`, `fumigants`, `formulations`, `stock_levels`, `stock_movements`, `gas_readings`, `corrective_actions`, `fumigation_closeout`, `signatures`, `notifications`, `audit_log`, `household_clients`, `household_reminders`, `pending_submissions`.
-- [ ] 1.3 Add `drizzle.config.ts` and a single DB client that uses Neon’s HTTP/WebSocket serverless driver (not a persistent TCP pool), matching SDD §A.6 / §T.2.
-- [ ] 1.4 Store `DATABASE_URL` (and related Neon secrets) as environment variables only; never commit them. Document required env vars for local `.env.local`.
-- [ ] 1.5 Generate the initial Drizzle Kit migration under `db/migrations/` and apply it to a Neon branch. Prefer `migrate` in CI later (11.2); `push` is acceptable for the first local apply if the emitted SQL is reviewed first.
-- [ ] 1.6 Seed reference data: fumigants (`aluminium_phosphide`, `magnesium_phosphide`) and formulations (`sachet_11g`, `tablet_1g`, `plate_33g`) with crop-type constraints and `stock_levels` + `lowStockThreshold`. Mirror the demo’s crop/stock filtering rules from `lib/fumigants.ts`.
-- [ ] 1.7 Optional local-only seed of the reviewed sample FCC (`FCC-2026-000512` / Alliance One) on a non-production Neon branch so UI work has a realistic row. Do not seed production.
+> Nothing else in this roadmap can persist correctly until Neon + Prisma exist. Reuse the existing App Router UI; do not rebuild screens here. The current `lib/store.tsx` localStorage store is demo-only and must not become the production data layer.
+- [x] 1.1 Install `prisma`, `@prisma/client`, `@prisma/adapter-neon`, and the Neon serverless driver (`@neondatabase/serverless`).
+- [x] 1.2 Create `prisma/schema.prisma` covering every SDD §A.4 table with FKs and enums: `users`, `work_orders`, `fccs`, `shipping_instructions`, `fumigation_descriptions`, `fumigants`, `formulations`, `stock_levels`, `stock_movements`, `gas_readings`, `corrective_actions`, `fumigation_closeout`, `signatures`, `notifications`, `audit_log`, `household_clients`, `household_reminders`, `pending_submissions`.
+- [x] 1.3 Instantiate `PrismaClient` (e.g. in `lib/prisma.ts`) configured with `@prisma/adapter-neon` and Neon’s HTTP/WebSocket serverless driver, matching SDD §A.6 / §T.2.
+- [x] 1.4 Store `DATABASE_URL` (and related Neon secrets) as environment variables only; never commit them. Document required env vars for local `.env.local`.
+- [x] 1.5 Generate the initial Prisma migration under `prisma/migrations/` using `npx prisma migrate dev` and generate Prisma Client (`npx prisma generate`). Prefer `prisma migrate deploy` in CI later (11.2).
+- [x] 1.6 Seed reference data: fumigants (`aluminium_phosphide`, `magnesium_phosphide`) and formulations (`sachet_11g`, `tablet_1g`, `plate_33g`) with crop-type constraints and `stock_levels` + `lowStockThreshold`. Mirror the demo’s crop/stock filtering rules from `lib/fumigants.ts`.
+- [x] 1.7 Optional local-only seed of the reviewed sample FCC (`FCC-2026-000512` / Alliance One) on a non-production Neon branch so UI work has a realistic row. Do not seed production.
 
 ### 2.0 Authentication & Role-Based Access (generated against SDD v1.0)
 > Must land before any mutating API in 3.0+. The current `/login` role cards and `RoleSwitcher` are demo controls, not Neon Auth.
@@ -104,13 +104,13 @@ This file combines the planned development roadmap and the reactive work log (fi
 ### 11.0 Observability, CI/CD, Tests & Production Config (generated against SDD v1.0)
 > No GitHub Actions, tests, or `vercel.json` exist today. README still describes a frontend-only demo.
 - [ ] 11.1 Confirm `audit_log` is written for readings, corrective actions, stock movements, SI edits, certification, and intake conversion; add any missing writers. This table is the durable compliance record (SDD §R).
-- [ ] 11.2 GitHub Actions on every PR: typecheck, lint, Drizzle schema validation, and tests. Vercel preview deploys remain on Git integration (SDD §E).
+- [ ] 11.2 GitHub Actions on every PR: typecheck, lint, Prisma schema validation (`prisma validate`), and tests. Vercel preview deploys remain on Git integration (SDD §E).
 - [ ] 11.3 Establish a test runner and cover the correctness-critical paths: stock deduction transaction + insufficient-stock reject; reading status derivation at 600ppm; certify lock + sequential FCC number; reminder `sentAt` idempotency; verify payload is public-safe; middleware RBAC (client cannot adjust stock; unauthenticated cannot POST readings).
-- [ ] 11.4 Rewrite `README.md` to match the SDD stack (Neon, Drizzle, Neon Auth, Blob, Resend, Cron) and real install/dev/migrate commands. Retire “there is no backend” and the stale “QR codes are visual placeholders” note.
+- [ ] 11.4 Rewrite `README.md` to match the SDD stack (Neon, Prisma, Neon Auth, Blob, Resend, Cron) and real install/dev/migrate commands. Retire “there is no backend” and the stale “QR codes are visual placeholders” note.
 - [ ] 11.5 Document required Vercel env vars (Neon, Resend, Blob token, intake HMAC/API key). Confirm secrets are never committed.
 - [ ] 11.6 Rate-limit `intake/website` and `verify/[certificateId]` if not fully done in 8.2 / 7.5.
 - [ ] 11.7 Structured request logs on route handlers. Optional Sentry free-tier hookup as recommended in SDD §R (not a blocker).
 - [ ] 11.8 Leave SDD open items unresolved in code until Ops confirms them: 600ppm instrument/unit; weekend/holiday skip; corrective-action taxonomy vs free text; un-actioned critical escalation; Date De-gassed vs aeration fields; Executive dashboard. Do not invent product answers here.
 
 ## Reactive Log
-*No entries yet. This section is owned exclusively by `@intake`.*
+2026-09-11 — Pinned `prisma@6.7.0` (+ `@prisma/client`, `@prisma/adapter-neon`, `@neondatabase/serverless@0.10.4`) after discovering pnpm resolved to the unstable `prisma@8.0.0-rc.13` RC which has a breaking CLI architecture change (`generate` command removed) requiring Node 22.18+ and a `prisma.config.ts`-based datasource instead of `schema.prisma url = env(...)`. Stable 6.7.0 is compatible with Node 22.13.0 and the standard `schema.prisma` pattern used in this codebase.

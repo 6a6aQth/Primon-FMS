@@ -1,0 +1,390 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../node_modules/.prisma/client"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  supervisor
+  ops_manager
+  admin
+  client
+  executive
+}
+
+enum WorkOrderSource {
+  client_supplied
+  auto_generated
+  website
+}
+
+enum CropType {
+  tobacco
+  grain
+  both
+}
+
+enum Scale {
+  industrial
+  smallholder
+  household
+}
+
+enum FccStatus {
+  draft
+  in_progress
+  under_review
+  certified
+  flagged
+}
+
+enum FumigationType {
+  container
+  sheeted_stack
+}
+
+enum StockMovementType {
+  deduction
+  addition
+  adjustment
+}
+
+enum ReadingStatus {
+  compliant
+  critical
+  action_taken
+}
+
+enum SignatureRole {
+  supervising_fumigator
+  supplier_rep
+  certifying_officer
+}
+
+enum NotificationChannel {
+  in_app
+  email
+}
+
+enum PendingSubmissionStatus {
+  pending
+  converted
+  rejected
+}
+
+enum PendingSubmissionSourceType {
+  work_order
+  rfq
+  rfw
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      Role     @default(supervisor)
+  createdAt DateTime @default(now())
+
+  // Relations
+  clientWorkOrders         WorkOrder[]             @relation("ClientWorkOrders")
+  createdWorkOrders        WorkOrder[]             @relation("CreatedWorkOrders")
+  certifiedFccs            FCC[]                   @relation("CertifiedFccs")
+  recordedDescriptions     FumigationDescription[] @relation("RecordedDescriptions")
+  performedStockMovements  StockMovement[]         @relation("PerformedStockMovements")
+  enteredReadings          GasReading[]            @relation("EnteredReadings")
+  loggedCorrectiveActions  CorrectiveAction[]      @relation("LoggedCorrectiveActions")
+  notifications            Notification[]
+  reviewedSubmissions      PendingSubmission[]     @relation("ReviewedSubmissions")
+
+  @@map("users")
+}
+
+model WorkOrder {
+  id           String          @id @default(uuid())
+  code         String          @unique
+  source       WorkOrderSource @default(auto_generated)
+  cropType     CropType        @default(tobacco)
+  scale        Scale           @default(industrial)
+  status       String          @default("draft")
+  clientId     String?
+  salesOrderNo String?
+  shipmentNo   String?
+  deliveryNo   String?
+  createdById  String
+  createdAt    DateTime        @default(now())
+
+  // Relations
+  client         User?           @relation("ClientWorkOrders", fields: [clientId], references: [id])
+  createdBy      User            @relation("CreatedWorkOrders", fields: [createdById], references: [id])
+  fcc            FCC?
+  stockMovements StockMovement[]
+
+  @@map("work_orders")
+}
+
+model FCC {
+  id                String    @id @default(uuid())
+  workOrderId       String    @unique
+  certificateNumber String?   @unique
+  status            FccStatus @default(draft)
+  certifiedAt       DateTime?
+  certifiedById     String?
+  qrCodeUrl         String?
+  verificationUrl   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  workOrder              WorkOrder              @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  certifiedBy            User?                  @relation("CertifiedFccs", fields: [certifiedById], references: [id])
+  shippingInstructions   ShippingInstructions?
+  fumigationDescription  FumigationDescription?
+  gasReadings            GasReading[]
+  closeout               FumigationCloseout?
+  signatures             Signature[]
+
+  @@map("fccs")
+}
+
+model ShippingInstructions {
+  id                   String    @id @default(uuid())
+  fccId                String    @unique
+  tobaccoSupplier      String?
+  tobaccoSupplierAddress String?
+  consignee            String?
+  consigneeAddress     String?
+  fumigationContractor String?   @default("Primon Enterprises Limited")
+  cropYear             String?
+  tobaccoType          String?
+  netWeight            Float?
+  quantity             Int?
+  polylined            Boolean?
+  gradeName            String?
+  caseNos              String?
+  countryOfOrigin      String?
+  location             String?
+  warehouseSection     String?
+  lockedAt             DateTime?
+
+  // Relations
+  fcc FCC @relation(fields: [fccId], references: [id], onDelete: Cascade)
+
+  @@map("shipping_instructions")
+}
+
+model Fumigant {
+  id   String @id @default(uuid())
+  name String @unique // aluminium_phosphide | magnesium_phosphide
+
+  // Relations
+  formulations            Formulation[]
+  fumigationDescriptions FumigationDescription[]
+
+  @@map("fumigants")
+}
+
+model Formulation {
+  id          String   @id @default(uuid())
+  fumigantId  String
+  cropType    CropType @default(both)
+  name        String // sachet_11g | tablet_1g | plate_33g
+  unit        String   @default("g")
+
+  // Relations
+  fumigant               Fumigant                @relation(fields: [fumigantId], references: [id])
+  stockLevel             StockLevel?
+  stockMovements         StockMovement[]
+  fumigationDescriptions FumigationDescription[]
+
+  @@map("formulations")
+}
+
+model StockLevel {
+  id                String   @id @default(uuid())
+  formulationId     String   @unique
+  quantityOnHand    Float    @default(0)
+  lowStockThreshold Float    @default(100)
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  formulation Formulation @relation(fields: [formulationId], references: [id], onDelete: Cascade)
+
+  @@map("stock_levels")
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  formulationId String
+  workOrderId   String?
+  type          StockMovementType
+  quantity      Float
+  note          String?
+  performedById String
+  performedAt   DateTime          @default(now())
+
+  // Relations
+  formulation Formulation @relation(fields: [formulationId], references: [id])
+  workOrder   WorkOrder?  @relation(fields: [workOrderId], references: [id])
+  performedBy User        @relation("PerformedStockMovements", fields: [performedById], references: [id])
+
+  @@map("stock_movements")
+}
+
+model FumigationDescription {
+  id                 String         @id @default(uuid())
+  fccId              String         @unique
+  fumigationType     FumigationType @default(sheeted_stack)
+  fumigantId         String
+  formulationId      String
+  doseGm3            Float
+  totalVolumeM3      Float
+  totalFumigantUsedG Float
+  recordedById       String
+  recordedAt         DateTime       @default(now())
+
+  // Relations
+  fcc         FCC         @relation(fields: [fccId], references: [id], onDelete: Cascade)
+  fumigant    Fumigant    @relation(fields: [fumigantId], references: [id])
+  formulation Formulation @relation(fields: [formulationId], references: [id])
+  recordedBy  User        @relation("RecordedDescriptions", fields: [recordedById], references: [id])
+
+  @@map("fumigation_descriptions")
+}
+
+model GasReading {
+  id                  String        @id @default(uuid())
+  fccId               String
+  dayNumber           Int // 1 to 6
+  readingDate         DateTime
+  airspacePpm         Float
+  probeCasePpm        Float
+  ambientTempC        Float?
+  productTempC        Float?
+  relativeHumidityPct Float?
+  status              ReadingStatus @default(compliant)
+  enteredById         String
+  enteredAt           DateTime      @default(now())
+
+  // Relations
+  fcc              FCC               @relation(fields: [fccId], references: [id], onDelete: Cascade)
+  enteredBy        User              @relation("EnteredReadings", fields: [enteredById], references: [id])
+  correctiveAction CorrectiveAction?
+
+  @@map("gas_readings")
+}
+
+model CorrectiveAction {
+  id           String    @id @default(uuid())
+  gasReadingId String    @unique
+  description  String
+  actionTakenAt DateTime @default(now())
+  resolvedAt   DateTime?
+  loggedById   String
+
+  // Relations
+  gasReading GasReading @relation(fields: [gasReadingId], references: [id], onDelete: Cascade)
+  loggedBy   User       @relation("LoggedCorrectiveActions", fields: [loggedById], references: [id])
+
+  @@map("corrective_actions")
+}
+
+model FumigationCloseout {
+  id                String    @id @default(uuid())
+  fccId             String    @unique
+  datePlaced        DateTime
+  aerationBegan     DateTime?
+  aerationCompleted DateTime?
+  durationHours     Float?
+
+  // Relations
+  fcc FCC @relation(fields: [fccId], references: [id], onDelete: Cascade)
+
+  @@map("fumigation_closeout")
+}
+
+model Signature {
+  id         String        @id @default(uuid())
+  fccId      String
+  role       SignatureRole
+  signerName String
+  signedAt   DateTime      @default(now())
+
+  // Relations
+  fcc FCC @relation(fields: [fccId], references: [id], onDelete: Cascade)
+
+  @@map("signatures")
+}
+
+model Notification {
+  id        String              @id @default(uuid())
+  userId    String
+  type      String
+  payload   Json
+  channel   NotificationChannel @default(in_app)
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  action     String
+  actorId    String?
+  diff       Json?
+  createdAt  DateTime @default(now())
+
+  @@map("audit_log")
+}
+
+model HouseholdClient {
+  id              String   @id @default(uuid())
+  name            String
+  contactEmail    String
+  contactPhone    String?
+  address         String?
+  lastServiceDate DateTime?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  reminders HouseholdReminder[]
+
+  @@map("household_clients")
+}
+
+model HouseholdReminder {
+  id                String    @id @default(uuid())
+  householdClientId String
+  dueDate           DateTime
+  sentAt            DateTime?
+  channel           String    @default("email")
+
+  // Relations
+  householdClient HouseholdClient @relation(fields: [householdClientId], references: [id], onDelete: Cascade)
+
+  @@map("household_reminders")
+}
+
+model PendingSubmission {
+  id           String                      @id @default(uuid())
+  sourceType   PendingSubmissionSourceType @default(work_order)
+  payload      Json
+  status       PendingSubmissionStatus     @default(pending)
+  receivedAt   DateTime                    @default(now())
+  reviewedById String?
+
+  // Relations
+  reviewedBy User? @relation("ReviewedSubmissions", fields: [reviewedById], references: [id])
+
+  @@map("pending_submissions")
+}

@@ -19,7 +19,7 @@
 | Repo structure | Monorepo — single Next.js app |
 | API layer | Next.js Route Handlers (`app/api/**/route.ts`) |
 | Database | Neon (serverless Postgres) |
-| ORM | Drizzle ORM |
+| ORM | Prisma ORM (`prisma`, `@prisma/client`, `@prisma/adapter-neon`) |
 | Auth | Neon Auth |
 | File/object storage | Vercel Blob |
 | Static assets | `public/` folder + Next.js Image Optimization |
@@ -99,7 +99,7 @@ Grouped by the FMS modules defined in the requirements document:
 
 ### 3. Constraints
 
-- **Team/skillset:** Small dev team building on a TypeScript/Next.js monorepo — favours an integrated, low-ops stack (Vercel + Neon + Drizzle) over a multi-service architecture.
+- **Team/skillset:** Small dev team building on a TypeScript/Next.js monorepo — favours an integrated, low-ops stack (Vercel + Neon + Prisma) over a multi-service architecture.
 - **Traffic:** Low — internal staff (single-digit to low tens of concurrent users) plus occasional client/public-site traffic; no internet-scale load expected.
 - **Data size:** Modest — work orders, FCCs, and readings are structured, small records; the larger storage driver is generated PDFs and QR images, not raw data volume.
 - **Connectivity:** Field connectivity at fumigation sites confirmed reliable — no offline-first requirement.
@@ -184,7 +184,7 @@ flowchart TB
 
     subgraph Data Layer
         Neon[(Neon Postgres)]
-        Drizzle[Drizzle ORM]
+        Prisma[Prisma ORM]
         NeonAuth[Neon Auth]
     end
 
@@ -199,7 +199,7 @@ flowchart TB
     end
 
     Browser <--> NextApp
-    NextApp --> Drizzle --> Neon
+    NextApp --> Prisma --> Neon
     NextApp --> NeonAuth
     NextApp --> Blob
     NextApp --> Public
@@ -224,9 +224,9 @@ flowchart LR
     E --> I[Revalidate FCC page cache]
 ```
 
-### 4. Database Schema / Data Model (Drizzle)
+### 4. Database Schema / Data Model (Prisma)
 
-Core tables (fields abbreviated to key columns; full types/constraints defined in Drizzle schema files under `db/schema/`):
+Core tables (fields abbreviated to key columns; full types/constraints defined in Prisma schema file under `prisma/schema.prisma`):
 
 ```
 users               id, name, email, role (supervisor|ops_manager|admin|client|executive), createdAt
@@ -314,7 +314,7 @@ app/api/
 ### 6. Deployment Architecture
 
 - Single Vercel project, single Next.js app (monorepo) — UI and API route handlers deployed together, scaling as one unit.
-- Neon Postgres accessed via Drizzle using the Neon serverless HTTP/WebSocket driver (not a persistent TCP pool), matching Vercel's serverless function model.
+- Neon Postgres accessed via Prisma using `@prisma/adapter-neon` with Neon's serverless HTTP/WebSocket driver (not a persistent TCP pool), matching Vercel's serverless function model.
 - Vercel Cron triggers `POST /api/household/reminders/run` daily.
 - Vercel Blob stores generated FCC PDFs and QR code images, referenced by URL from `fccs.qrCodeUrl`.
 - Static brand assets (logo, icons used in the FCC header) live in `public/` and are served via Next.js Image Optimization.
@@ -351,7 +351,7 @@ Primon is an SME, not a high-traffic consumer product — sizing is deliberately
 
 | Potential bottleneck | Assessment | Mitigation |
 |---|---|---|
-| Neon connections under serverless concurrency | Real but well-understood risk with Vercel + Postgres | Use Neon's serverless driver (HTTP/WebSocket) via Drizzle, not raw TCP pooling, to avoid connection exhaustion. |
+| Neon connections under serverless concurrency | Real but well-understood risk with Vercel + Postgres | Use Neon's serverless driver (HTTP/WebSocket) via `@prisma/adapter-neon`, not raw TCP pooling, to avoid connection exhaustion. |
 | Email delivery (Resend) during multi-recipient certification/alert bursts | Low risk at current volume | Queue non-blocking; retry with backoff; Resend's rate limits comfortably exceed Primon's alert volume. |
 | Cross-region latency (Vercel edge regions vs. Malawi users) | Moderate, inherent to hosting choice | Not addressed with multi-region infra at this stage — acceptable given non-real-time nature of most flows; revisit only if user complaints arise. |
 | Vercel Blob growth over years | Negligible at current volume | Periodic lifecycle review, not urgent. |
@@ -363,10 +363,10 @@ This system is explicitly **not** being designed to survive "1,000,000 users" �
 ## T — TRADEOFFS (Technology & Architecture Decisions)
 
 ### 1. Database: Postgres (Neon) — chosen over NoSQL
-Work orders, FCCs, and their sub-sections are strongly relational with real transactional needs (stock deduction, certification locking, audit trail). Postgres's ACID guarantees and Drizzle's relational query builder are a natural fit; NoSQL would force awkward joins/denormalisation for reporting and audit queries with no throughput benefit at this scale.
+Work orders, FCCs, and their sub-sections are strongly relational with real transactional needs (stock deduction, certification locking, audit trail). Postgres's ACID guarantees and Prisma's query engine and type-safe client are a natural fit; NoSQL would force awkward joins/denormalisation for reporting and audit queries with no throughput benefit at this scale.
 
-### 2. ORM: Drizzle — chosen over Prisma
-Drizzle's SQL-like query builder and lightweight runtime suit the serverless/edge-friendly Neon driver well, with less cold-start overhead than Prisma's engine binary, and TypeScript-first schema definitions that match the monorepo's TS-only stack.
+### 2. ORM: Prisma — chosen over Drizzle
+Prisma's intuitive schema definition language (`schema.prisma`), powerful query engine, auto-generated type-safe client, robust migration system (`prisma migrate`), and seamless Neon serverless adapter (`@prisma/adapter-neon`) provide strong developer ergonomics, reliable migrations, and type-safe transactional guarantees for compliance workflows.
 
 ### 3. Auth: Neon Auth — chosen over a custom/third-party auth service
 Keeps auth colocated with the database provider already in use, reducing integration surface area for an SME-scale app where a dedicated identity provider (e.g. Auth0, Clerk) would add cost and complexity disproportionate to the user count. Role-based access (Supervisor / Ops Manager / Admin / Client / Executive) is modelled directly against Neon Auth's user/session primitives.
@@ -398,7 +398,7 @@ Every choice above (Neon, Vercel, Resend, Blob) is a pay-as-you-go/generous-free
 | Component | Service |
 |---|---|
 | Frontend + API (Next.js App Router, Route Handlers) | Vercel |
-| Database | Neon (Postgres, serverless driver via Drizzle) |
+| Database | Neon (Postgres, serverless driver via `@prisma/adapter-neon`) |
 | Auth | Neon Auth |
 | File storage (PDFs, QR images) | Vercel Blob |
 | Static assets | `public/` + Next.js Image Optimization |
@@ -415,13 +415,13 @@ Building on the naming already implied by the reviewed FCC sample (`verify.primo
 
 ### Infrastructure as Code
 
-- **Database schema/migrations:** Drizzle Kit migrations committed to the repo (`db/migrations/`), applied via `drizzle-kit push`/`migrate` in CI before deploy.
+- **Database schema/migrations:** Prisma schema and migrations committed to the repo (`prisma/schema.prisma`, `prisma/migrations/`), applied via `prisma migrate deploy` in CI before deploy.
 - **Vercel project config:** `vercel.json` (redirects, cron schedule) committed to the repo.
 - No separate Terraform/Pulumi layer is warranted — Vercel + Neon + Resend are all managed via their own dashboards/CLI and version-controlled config files, which is proportionate for this scale.
 
 ### CI/CD Pipeline
 
-- **GitHub Actions:** typecheck, lint, run Drizzle schema validation, run tests on every PR.
+- **GitHub Actions:** typecheck, lint, run Prisma schema validation (`npx prisma validate`), run tests on every PR.
 - **Vercel Git integration:** automatic preview deployments per PR (useful for Ops Manager/CEO to review UI changes before merge); automatic production deploy on merge to `main`.
 - **Migrations:** run as a pre-deploy step (Vercel build step or a GitHub Actions job) against Neon before the new app version goes live, with a rollback plan (Neon branching can create a pre-migration branch snapshot for safety).
 
